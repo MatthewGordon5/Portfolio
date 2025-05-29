@@ -1,0 +1,585 @@
+---
+title: "201162012"
+output: html_document
+date: "2024-11-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Prelims
+
+```{r}
+#install.packages('corrgram')
+#install.packages("dplyr")
+#install.packages("VIM",dependencies = T)
+
+library(ggplot2) 
+library(corrgram)
+library(dplyr)
+library(knitr)
+library(VIM)
+setwd("~/Desktop/Coursework/Part 1")
+data <- read.csv('order_july24.csv')
+head(data)
+
+```
+
+# Data Understanding
+
+## Target - Spend
+
+```{r}
+
+summary_table <- data |> 
+  summarize(target_SD = sd(data$spend, na.rm = TRUE),
+    target_variance = var(data$spend, na.rm = TRUE)
+  )
+
+summary(data$spend)
+
+print(summary_table)
+
+# Function to create and save box plots
+create_boxplot <- function(column_name, column_label, data) {
+  p <- ggplot(data, aes_string(y = column_name)) +
+    geom_boxplot(fill = "skyblue", color = "darkblue", outlier.color = "red", outlier.size = 2) +
+    labs(title = paste("Box Plot of", column_label), y = column_label, x = "") +
+    theme_minimal()
+    print(p)
+  
+  # Save the plot
+  ggsave(paste0(column_name, "_boxplot.png"), plot = p, width = 6, height = 4, dpi = 300)
+}
+
+# Function to create and save histograms
+create_histogram <- function(column_name, column_label, data) {
+  p <- ggplot(data, aes_string(x = column_name)) +
+    geom_histogram(fill = "skyblue", color = "black", bins = 10) +
+    labs(title = paste("Histogram of", column_label), x = column_label, y = "Frequency") +
+    theme_minimal()
+    print(p)
+  
+  # Save the plot
+  ggsave(paste0(column_name, "_histogram.png"), plot = p, width = 6, height = 4, dpi = 300)
+}
+
+create_boxplot("spend", "Spend", data)
+create_histogram("spend", "Spend", data)
+
+```
+
+## Features - Numerical
+
+```{r}
+
+summary_table2 <- data |>
+  summarise(past_spend_sd = sd(past_spend, na.rm = TRUE),
+    past_spend_var = var(past_spend, na.rm = TRUE),
+    
+    age_sd = sd(age, na.rm = TRUE),
+    age_var = var(age, na.rm = TRUE),
+    
+    time_web_sd = sd(time_web, na.rm = TRUE),
+    time_web_var = var(time_web, na.rm = TRUE)
+  )
+
+summary(data$past_spend)
+summary(data$age)
+summary(data$time_web)
+
+print(summary_table2)
+
+# Generate and save box plots and histograms for each numerical variable
+create_boxplot("past_spend", "Past Spend", data)
+create_histogram("past_spend", "Past Spend", data)
+
+create_boxplot("age", "Age", data)
+create_histogram("age", "Age", data)
+
+create_boxplot("time_web", "Time on Website", data)
+create_histogram("time_web", "Time on Website", data)
+
+
+```
+
+## Features - Catagorical
+
+```{r}
+
+# Summary table for categorical variables
+voucher_summary <- data %>%
+  count(voucher) %>%
+  rename(Count = n)
+
+ad_channel_summary <- data %>%
+  count(ad_channel) %>%
+  rename(Count = n)
+
+print(voucher_summary)
+print(ad_channel_summary)
+
+# Function to create and save pie charts
+create_pie_chart <- function(column_name, column_label, data) {
+  counts <- data %>% count(!!sym(column_name))
+  p <- ggplot(counts, aes(x = "", y = n, fill = factor(!!sym(column_name)))) +
+    geom_bar(stat = "identity", width = 1) +
+    coord_polar(theta = "y") +
+    labs(title = paste("Pie Chart of", column_label), fill = column_label) +
+    theme_minimal()
+    print(p)
+  
+  # Save the plot
+  ggsave(paste0(column_name, "_piechart.png"), plot = p, width = 6, height = 4, dpi = 300)
+}
+
+# Generate and save pie charts for categorical variables
+create_pie_chart("ad_channel", "Ad Channel", data)
+create_pie_chart("voucher", "Voucher", data)
+
+```
+
+# Data Preperation
+
+## Missing data
+
+```{r}
+
+
+aggr(data, 
+     numbers = TRUE, 
+     prop = FALSE, 
+     cex.axis = 0.7,      
+     las = 2)      
+
+
+# Create a table showing missing data count and percentage
+missing_data_summary <- data.frame(
+  Missing_Values = colSums(is.na(data)),
+  Total_Values = nrow(data),
+  Missing_Percentage = (colSums(is.na(data)) / nrow(data)) * 100
+)
+
+# Print the table
+print(missing_data_summary)
+
+# Find the total number of incomplete rows
+total_incomplete_rows = sum(!complete.cases(data))
+
+# Percentage missing
+percentage_incomplete_rows = (total_incomplete_rows / nrow(data)) * 100
+
+# Print the result
+print(paste("Percentage of rows with missing values:",round(percentage_incomplete_rows, 2),"%"))
+print(paste("Total number of rows with missing values:", total_incomplete_rows))
+
+
+```
+
+## Deletion
+
+```{r}
+
+# Remove rows with missing values
+data_cleaned = data %>% filter(complete.cases(.))
+
+# Isolate rows where time_web is 0
+rows_with_time_web_zero <- subset(data, time_web == 0)
+
+# View the isolated rows
+print(rows_with_time_web_zero)
+
+
+
+# Number of rows before and after cleaning
+print(paste("Rows before cleaning:", nrow(data)))
+print(paste("Rows after cleaning:", nrow(data_cleaned)))
+
+
+```
+
+There are 5 rows where the time spent on the website before making the purchase was 0. This would lead me to believe this is an error in the data collection. However there are a number of results lower than 20 seconds and furthermore all results bar one were less than 120 seconds. Given my experience with online shopping it usually takes much longer and therefore more information will be needed on data collectiopn before a decision can be made about these figures. When does the timer start etc is this just time spent browsing and if you already know what you want do you geta. time of 0?
+
+## Check no issues
+
+```{r}
+
+summary_table3 <- data_cleaned |>
+  summarise(target_SD = sd(data$spend, na.rm = TRUE),
+    target_variance = var(data$spend, na.rm = TRUE),
+    
+    past_spend_sd = sd(past_spend, na.rm = TRUE),
+    past_spend_var = var(past_spend, na.rm = TRUE),
+    
+    age_sd = sd(age, na.rm = TRUE),
+    age_var = var(age, na.rm = TRUE),
+    
+    time_web_sd = sd(time_web, na.rm = TRUE),
+    time_web_var = var(time_web, na.rm = TRUE)
+  )
+
+
+summary(data_cleaned$spend)
+summary(data_cleaned$past_spend)
+summary(data_cleaned$age)
+summary(data_cleaned$time_web)
+
+print(summary_table3)
+
+
+
+```
+
+
+
+
+## Dummifying ad_channel
+
+ad_channel1 is base
+
+```{r}
+
+data_cleaned$ad_channel <- as.factor(data_cleaned$ad_channel)
+
+model_data=data_cleaned
+
+model_data <- model_data %>%
+  mutate(
+    ad_channel2 = ifelse(ad_channel == "2", 1, 0),
+    ad_channel3 = ifelse(ad_channel == "3", 1, 0),
+    ad_channel4 = ifelse(ad_channel == "4", 1, 0)
+  ) %>%
+  select(-ad_channel)
+
+```
+
+## Checking for correlations
+
+```{r}
+
+
+cor(model_data)
+corrgram(model_data)
+
+png("corrgram_model.png", width = 800, height = 600)
+corrgram(model_data, order = TRUE, lower.panel = panel.shade, upper.panel = panel.pie, text.panel = panel.txt)
+dev.off()
+
+```
+
+There is clearly a positive correlation between age, web_time and past_spend with spend. Voucher and all of the ad_channels barely show any correlation and it may be prudent to remove from the dataset for modelling. It may also allow for less data to be cropped in the cleaning stage.
+
+## Checking linear regression assumptions
+
+### Assumption 1 - Linear relationship
+
+#### Voucher factor
+
+```{r}
+
+# Define numerical columns for scatter plots
+numerical_columns = c("past_spend", "age", "time_web")
+
+# Loop through numerical columns and plot
+for (feature in numerical_columns) {
+  p <- ggplot(data_cleaned, aes_string(x = feature, y = "spend", color = "factor(voucher)")) +
+    geom_point() +
+    geom_smooth(method = "lm", color = "blue", se = FALSE) +
+    labs(
+      title = paste("Scatter Plot of", feature, "vs Spend"),
+      x = feature,
+      y = "Spend",
+      color = "Voucher (0 = No, 1 = Yes)"
+    ) +
+    theme_minimal()
+  print(p)
+  
+  ggsave(paste0("scatter_plot_", feature, ".png"), plot = p, width = 6, height = 4, dpi = 300)
+}
+
+```
+
+#### Ad Channel factor
+
+```{r}
+
+for (feature in numerical_columns) {
+  p <- ggplot(data_cleaned, aes_string(x = feature, y = "spend", color = "ad_channel")) +
+    geom_point() +
+    geom_smooth(method = "lm", color = "blue", se = FALSE) +
+    labs(
+      title = paste("Scatter Plot of", feature, "vs Spend"),
+      x = feature,
+      y = "Spend",
+      color = "Ad Channel"
+    ) +
+    theme_minimal()
+  print(p)
+  
+  ggsave(paste0("scatter_plot_2_", feature, ".png"), plot = p, width = 6, height = 4, dpi = 300)
+}
+
+
+
+```
+
+All variables follow a linear relationship with the target variable, ad channel and voucher not tested as they are catagorical/boolean
+
+
+## Assumption 2 - Variance of dependent variable
+
+```{r}
+
+categorical_columns = c("voucher", "ad_channel")
+
+# Loop through categorical columns to create scatter plots
+for (feature in categorical_columns) {
+  p <- ggplot(data_cleaned, aes_string(x = feature, y = "spend")) +
+    geom_jitter(width = 0.2, height = 0, alpha = 0.7) +  
+    stat_summary(fun = mean, geom = "point", shape = 18, size = 4, color = "red") +
+    labs(
+      title = paste("Scatter Plot of", feature, "vs Spend"),
+      x = feature,
+      y = "Spend"
+    ) +
+    theme_minimal()
+  print(p)
+  
+  ggsave(paste0("scatter_plot_", feature, ".png"), plot = p, width = 6, height = 4, dpi = 300)
+}
+
+```
+
+Assumption 2 of linear regression requires that the variance of the dependent variable (spend) remains constant across all values of the independent variables. This is known as homoscedasticity and ensures that the spread of the dependent variable is not systematically increasing or decreasing as the independent variables change.
+
+To check this assumption, we created scatter plots of each independent variable (numerical and categorical) against the dependent variable (spend) and analyzed the spread of data points for each variable:
+
+For Numerical Variables:
+
+Scatter plots were used to observe the vertical spread of spend across the range of numerical variables (e.g., age and time_web).
+The spread of spend appeared consistent across all values of the numerical variables, with no evidence of a "funnel shape" (increasing or decreasing variance).
+This indicates that the variance of the dependent variable remains stable as the numerical variables change.
+For Categorical Variables:
+
+Scatter plots (with jittering) were created for categorical variables like voucher and ad_channel to visualize the distribution of spend within each category.
+The spread of spend within each level of the categorical variables was examined, and no significant differences in variance were observed between categories.
+Conclusion: The scatter plots suggest that the assumption of constant variance is sufficiently satisfied. There are no clear patterns of heteroscedasticity, such as funnel shapes or uneven variance, in the relationship between spend and the independent variables. Therefore, the data meets the requirements for linear regression with respect to this assumption.
+
+
+
+## Assumption 3 - The error (distance from the line) of each point should be independent from the error of other points.
+
+No patterns are visible, assumption 3 passed
+
+
+
+# Fitting the model
+
+```{r}
+
+
+model <- lm(spend ~ ., data=model_data)
+
+```
+
+# Output
+
+```{r}
+
+summary(model)
+
+```
+
+# Model Evaluation
+
+## R-Squared
+
+```{r}
+
+print(summary(model)$r.squared)
+
+```
+
+## Adjusted R-Squared
+
+```{r}
+
+print(summary(model)$adj.r.squared)
+
+```
+
+Both are approximately at 0.866. This mean that this model can explain 86.6% of variation within spend value.
+
+# Variable Evaluation
+
+```{r}
+
+summary(model)$coefficients
+
+```
+The estimate represents the impact of change in an independent variable by one unit on the dependent variable.
+• The std. error or standard error represents the gap that the impact would likely be.
+• The t value is the t-test score on the t standard distribution value that this estimate presented.
+• The Pr(>|t|) value represents the probability of this estimate happening if the null hypothesis is that there is no relationship between the independent and dependent variables (estimate as 0)
+
+The regression model predicts spend using past_spend, age, time_web, voucher, and dummy variables for ad_channel with ad_channel1 as the reference category.
+
+Weak Predictors:
+
+ad_channel2: Customers spend 0.25 more on average than ad_channel1 (not significant, p = 0.27).
+ad_channel3: Customers spend 0.40 more on average than ad_channel1 (weak significance, p = 0.08).
+ad_channel4: Customers spend 0.08 more on average than ad_channel1 (not significant, p = 0.73).
+
+voucher: Minimal effect, 0.01 increase in spend (not significant, p = 0.95).
+
+Key Predictors:
+
+past_spend: Strong predictor, with each unit increase raising spend by 0.36 (p < 0.001).
+
+age: Super Significant, with each additional year increasing spend by 1.48 (p < 0.001).
+
+time_web:Super Significant, each unit increase raises spend by 0.34 (p < 0.001).
+
+
+# explanatory end
+
+
+# prediction
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(123)
+
+pred_data = model_data
+
+# Split the data into training (80%) and testing (80%)
+# Create a random vector of TRUE/FALSE for the split
+split <- sample(1:nrow(pred_data), size = 0.8 * nrow(pred_data))  # 80% training data
+train_data <- pred_data[split, ]                            # Training set
+test_data <- pred_data[-split, ]                            # Testing set
+
+
+print(dim(pred_data))
+print(dim(train_data))
+print(dim(test_data))
+
+
+```
+
+
+
+As you can see, the training data contains 1500 values out of our 1876 and the testing data contains 376 out of 1876.
+
+## Training the model
+
+```{r}
+
+# Drop the 'spend' column from the test set
+test_data_no_target <- test_data[, !names(test_data) %in% "spend"]
+
+# Train the linear regression model on the training data
+model <- lm(spend ~ ., data = train_data)
+
+# Predict on the test data without the spend column
+predictions <- predict(model, newdata = test_data_no_target)
+
+# Calculate RMSE
+actuals <- test_data$spend
+rmse <- sqrt(mean((predictions - actuals)^2))
+
+# Print results
+summary(model)
+cat("Root Mean Squared Error (RMSE):", rmse, "\n")
+
+
+```
+
+R-squared of 0.86 means 86% of the variation in spend can be explained by the model.
+
+p-value on f-statistic is <0.005 showing that model is statistically significant
+
+
+## Plot difference in data
+
+```{r}
+
+
+plot(actuals, predictions, 
+     main = "Actual vs Predicted Values", 
+     xlab = "Actual Spend", 
+     ylab = "Predicted Spend",
+     col = "blue", pch = 16)
+abline(a = 0, b = 1, col = "red", lwd = 2)  # 45-degree line
+
+
+saved_plot <- recordPlot()
+
+
+png("actual_vs_predicted.png", width = 800, height = 600)
+replayPlot(saved_plot)  
+dev.off()
+
+
+
+```
+
+# Predictions on the new dataset
+
+## Train on the original dataset
+
+using data_cleaned as the new data doesnt have ad_channel dummified
+
+```{r}
+
+final_data = data_cleaned
+
+final_data$ad_channel <- as.numeric(final_data$ad_channel)
+
+# Check if all values in ad_channel are 1, 2, 3, or 4
+valid_values <- c(1, 2, 3, 4)
+all_valid <- all(final_data$ad_channel %in% valid_values)
+
+# Print the result
+if (all_valid) {
+  cat("All values in ad_channel are valid (1, 2, 3, or 4).\n")
+} else {
+  cat("Some values in ad_channel are not valid. Invalid values:\n")
+  print(unique(final_data$ad_channel[!final_data$ad_channel %in% valid_values]))
+}
+
+
+final_model <- lm(spend ~ ., data = final_data)
+
+summary(final_model)
+```
+
+
+## Load in new data
+
+```{r}
+
+new_data = read.csv('new_customer24(1).csv')
+
+```
+
+
+There is no need to dummify ad_channel as before as lm can do it automatically
+
+```{r}
+
+predicted_spend <- predict(final_model, newdata = new_data)
+
+results <- data.frame(
+  order = new_data$order,           
+  prediction = predicted_spend      
+)
+
+print(results)
+
+
+```
+
+
+
