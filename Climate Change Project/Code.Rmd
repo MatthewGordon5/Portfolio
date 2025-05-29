@@ -1,0 +1,147 @@
+---
+title: "Skills Project"
+output: html_document
+date: "2025-04-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# CO2 Project
+
+
+## Set Up
+
+```{r}
+
+library(readr)
+
+setwd("~/Desktop/Learning Skills through Case Studies - MATH5747M/Assignment 4/Data")
+
+data_co2 <- read_csv("Co2 Yearly.csv", skip = 43)
+
+data_temps_initial <- read_csv("global_temperatures.csv")
+
+data_temps <- data_temps_initial[data_temps_initial$Year >= 1959, ]
+
+colnames(data_co2)[which(colnames(data_co2) == "year")] <- "Year"
+
+colnames(data_co2)[which(colnames(data_co2) == "mean")] <- "Co2"
+
+data_co2$unc <- NULL
+
+data <- merge(data_temps, data_co2, by = "Year")
+
+head(data_temps)
+
+head(data_co2)
+
+```
+
+## Scatter Plot
+
+```{r}
+library(ggplot2)
+
+ggplot(data, aes(x = Co2, y = TemperatureDeviation)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, colour = "blue") +
+  labs(title = "CO2 Concentration vs Temperature Anomaly",
+       x = "Mean CO2 concentration (ppm)",
+       y = "Temperature Anomaly (°C)")
+
+```
+
+## Pearson + Spearman Correlation Coefficients
+
+```{r}
+print("Pearson")
+cor(data$Co2, data$TemperatureDeviation, method = "pearson")
+print("Spearman")
+cor(data$Co2, data$TemperatureDeviation, method = "spearman")
+
+```
+
+## Regression Model
+
+```{r}
+
+model <- lm(TemperatureDeviation ~ Co2, data = data)
+summary(model)
+
+```
+
+## Normality Assumption for Linear Model
+
+```{r}
+# Histogram
+hist(residuals(model), main = "Histogram of Residuals", xlab = "Residuals")
+
+# Q–Q plot
+qqnorm(residuals(model))
+qqline(residuals(model), col = "red")
+
+# Shapiro-Wilk test
+shapiro.test(residuals(model))
+
+
+```
+
+
+## Homoscedasticity of Residuals for Linear Model
+
+```{r}
+# Residuals vs Fitted
+plot(fitted(model), residuals(model),
+     xlab = "Fitted Values", ylab = "Residuals",
+     main = "Residuals vs Fitted")
+abline(h = 0, col = "red")
+
+library(lmtest)
+bptest(model)
+
+
+```
+
+
+
+
+## Normalised Time Series Plot
+
+```{r}
+
+data$Co2_Scaled <- scale(data$Co2)
+data$TemperatureDeviation_Scaled <- scale(data$TemperatureDeviation)
+
+ggplot(data, aes(x = Year)) +
+  geom_line(aes(y = Co2_Scaled, colour = "CO2")) +
+  geom_line(aes(y = TemperatureDeviation_Scaled, colour = "Temperature Anomaly")) +
+  labs(title = "Standardised Time Series of CO2 and Temperature Anomalies",
+       y = "Standardised Value",
+       colour = "Legend")
+
+```
+
+## Cross-Correlation Function
+
+```{r}
+
+ccf(data$Co2, data$TemperatureDeviation, lag.max = 20, main = "Cross-Correlation of CO2 and Temperature")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
