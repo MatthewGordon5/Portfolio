@@ -1,0 +1,387 @@
+---
+title: "Coursework"
+output: html_document
+date: "2024-11-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# General stuff
+
+```{r}
+setwd("~/Desktop/Statistical Theory & Methods - MATH5741M/Coursework")
+load("mysample.RData")
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+```
+
+
+# Cleaning
+
+```{r}
+cleaned_data <- mysample
+removal_summary <- data.frame(
+  Column = character(),
+  Reason = character(),
+  Count = integer(),
+  Percentage = numeric(),
+  stringsAsFactors = FALSE
+)
+total_rows <- nrow(mysample)
+record_removal <- function(column, reason, count) {
+  percentage <- (count / total_rows) * 100
+  removal_summary <<- rbind(removal_summary, data.frame(
+    Column = column,
+    Reason = reason,
+    Count = count,
+    Percentage = round(percentage, 2)
+  ))
+}
+categorical_columns <- c("Breed", "Age", "Reason")  #
+for (col in categorical_columns) {
+  missing_count <- sum(is.na(cleaned_data[[col]]))
+  if (missing_count > 0) {
+    record_removal(col, "Missing (NA)", missing_count)
+  }
+  cleaned_data <- cleaned_data[!is.na(cleaned_data[[col]]), ]
+}
+numerical_columns <- c("Rehomed", "Visited", "Health")  
+for (col in numerical_columns) {
+  missing_count <- sum(cleaned_data[[col]] == 99999, na.rm = TRUE)
+  if (missing_count > 0) {
+    record_removal(col, "Invalid (99999)", missing_count)
+  }
+  invalid_count <- sum(cleaned_data[[col]] < 0, na.rm = TRUE) 
+  if (invalid_count > 0) {
+    record_removal(col, "Invalid (Negative Values)", invalid_count)
+  }
+  cleaned_data <- cleaned_data[cleaned_data[[col]] != 99999 & cleaned_data[[col]] >= 0, ]
+}
+boolean_column <- "Returned"  
+missing_count <- sum(is.na(cleaned_data[[boolean_column]]))
+if (missing_count > 0) {
+  record_removal(boolean_column, "Missing (NA)", missing_count)
+}
+cleaned_data <- cleaned_data[!is.na(cleaned_data[[boolean_column]]), ]
+total_removed <- sum(removal_summary$Count)
+total_percentage <- (total_removed / total_rows) * 100
+removal_summary <- rbind(removal_summary, data.frame(
+  Column = "Total",
+  Reason = "All Reasons",
+  Count = total_removed,
+  Percentage = round(total_percentage, 2)
+))
+print("Cleaned Data:")
+print(cleaned_data)
+print("Removal Summary:")
+print(removal_summary)
+table(cleaned_data$Breed)
+```
+
+# Data Exploration 
+
+## Catagorical
+
+```{r}
+categorical_columns <- c("Age", "Reason", "Returned")
+value_counts <- function(data, column_name) {
+  data %>%
+    group_by(Breed, !!sym(column_name)) %>%
+    summarise(Count = n(), .groups = "drop") %>%
+    rename(Value = !!sym(column_name)) 
+}
+value_counts_list <- lapply(categorical_columns, function(col) {
+  value_counts(cleaned_data, col)
+})
+names(value_counts_list) <- categorical_columns
+all_value_counts <- bind_rows(
+  lapply(names(value_counts_list), function(col) {
+    value_counts_list[[col]] %>%
+      mutate(Variable = col)
+  }),
+  .id = "Source"
+)
+for (col in categorical_columns) {
+  cat("\nValue Counts for", col, "by Breed:\n")
+  print(value_counts_list[[col]])
+}
+```
+
+## Numerical box plots
+
+```{r}
+rehomed_plot <- ggplot(cleaned_data, aes(x = Breed, y = Rehomed, fill = Breed)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "Boxplot of Rehoming Time by Breed",
+    x = "Breed",
+    y = "Rehoming Time (weeks)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+ggsave("rehomed_boxplot.png", plot = rehomed_plot, width = 6, height = 4)
+visited_plot <- ggplot(cleaned_data, aes(x = Breed, y = Visited, fill = Breed)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "Boxplot of Visited Time by Breed",
+    x = "Breed",
+    y = "Visited Time (weeks)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+ggsave("visited_boxplot.png", plot = visited_plot, width = 6, height = 4)
+health_plot <- ggplot(cleaned_data, aes(x = Breed, y = Health, fill = Breed)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "Boxplot of Health Score by Breed",
+    x = "Breed",
+    y = "Health Score"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+ggsave("health_boxplot.png", plot = health_plot, width = 6, height = 4)
+```
+
+## Numerical Summary
+
+```{r}
+summary_table <- cleaned_data %>%
+  group_by(Breed) %>%
+  summarise(
+    n = n(),  
+    Health_Mean_SD = paste0(round(mean(Health, na.rm = TRUE), 2), " ± ", round(sd(Health, na.rm = TRUE), 2)),
+    Rehomed_Mean_SD = paste0(round(mean(Rehomed, na.rm = TRUE), 2), " ± ", round(sd(Rehomed, na.rm = TRUE), 2)),
+    Visited_Mean_SD = paste0(round(mean(Visited, na.rm = TRUE), 2), " ± ", round(sd(Visited, na.rm = TRUE), 2))
+  )
+print(summary_table)
+```
+
+# Modelling & Estimation
+
+## Density PLots
+
+```{r}
+plot_density_with_mean <- function(data, breed_name) {
+  breed_data <- data %>% filter(Breed == breed_name)
+  mean_value <- mean(breed_data$Rehomed, na.rm = TRUE)
+  ggplot(breed_data, aes(x = Rehomed)) +
+    geom_density(fill = "blue", alpha = 0.4) +  
+    geom_vline(xintercept = mean_value, linetype = "dashed", color = "red", size = 1) +  
+    annotate("text", x = mean_value, y = 0.02, label = paste("Mean:", round(mean_value, 2)), 
+             color = "red", angle = 90, vjust = -0.5) + 
+    labs(
+      title = paste("Density Plot of Rehoming Time for", breed_name),
+      x = "Rehoming Time (Weeks)",
+      y = "Density"
+    ) +
+    theme_minimal()
+}
+plot_bichon <- plot_density_with_mean(cleaned_data, "Bichon Frise")
+plot_dobermann <- plot_density_with_mean(cleaned_data, "Dobermann")
+plot_terrier <- plot_density_with_mean(cleaned_data, "Staffordshire Bull Terrier")
+ggsave(filename = "bichon_frise_density.png", plot = plot_bichon, width = 8, height = 6)
+ggsave(filename = "dobermann_density.png", plot = plot_dobermann, width = 8, height = 6)
+ggsave(filename = "staffordshire_bull_terrier_density.png", plot = plot_terrier, width = 8, height = 6)
+print(plot_bichon)
+print(plot_dobermann)
+print(plot_terrier)
+```
+
+## Summary Statistics
+
+```{r}
+library(e1071)
+summary_stats <- cleaned_data %>%
+  group_by(Breed) %>%
+  summarise(
+    Mean = mean(Rehomed, na.rm = TRUE),
+    Median = median(Rehomed, na.rm = TRUE),
+    SD = sd(Rehomed, na.rm = TRUE),
+    Skewness = skewness(Rehomed, na.rm = TRUE),
+    Kurtosis = kurtosis(Rehomed, na.rm = TRUE)
+  )
+print(summary_stats)
+```
+
+# Testing Normality
+
+## Shapiro-Wilks Test
+
+```{r}
+shapiro_results <- cleaned_data %>%
+  group_by(Breed) %>%
+  summarise(
+    Shapiro_W_p = shapiro.test(Rehomed)$p.value,
+    Shapiro_W_statistic = shapiro.test(Rehomed)$statistic
+  )
+print(shapiro_results)
+```
+
+## Kolmogorow-Smirnov test
+
+```{r}
+ks_results <- cleaned_data %>%
+  group_by(Breed) %>%
+  summarise(
+    KS_p = ks.test(Rehomed, "pnorm", mean(Rehomed), sd(Rehomed))$p.value,
+    KS_statistic = ks.test(Rehomed, "pnorm", mean(Rehomed), sd(Rehomed))$statistic
+  )
+print(ks_results)
+```
+
+## QQ plots
+
+```{r}
+bichon_data <- cleaned_data$Rehomed[cleaned_data$Breed == "Bichon Frise"]
+dobermann_data <- cleaned_data$Rehomed[cleaned_data$Breed == "Dobermann"]
+terrier_data <- cleaned_data$Rehomed[cleaned_data$Breed == "Staffordshire Bull Terrier"]
+create_qq_plot <- function(data, breed_name, file_name) {
+    png(file_name, width = 800, height = 600)
+    qqnorm(data, main = paste("QQ Plot for", breed_name), pch = 19, col = "blue")
+    qqline(data, col = "red", lwd = 2)
+    dev.off()
+}
+create_qq_plot(bichon_data, "Bichon Frise", "bichon_frise_qqplot.png")
+create_qq_plot(dobermann_data, "Dobermann", "dobermann_qqplot.png")
+create_qq_plot(terrier_data, "Staffordshire Bull Terrier", "terrier_qqplot.png")
+```
+
+
+# Parameter Estimation
+
+```{r}
+bichon_params <- fitdistrplus::fitdist(bichon_data, "norm")
+print(bichon_params)
+dobermann_params <- fitdistrplus::fitdist(dobermann_data, "norm")
+print(dobermann_params)
+terrier_params <- fitdistrplus::fitdist(terrier_data, "norm")
+print(terrier_params)
+```
+
+# Confidence Intervals - Singles
+
+```{r}
+calculate_ci <- function(data, alpha = 0.05) {
+  n <- length(data)
+  mean_value <- mean(data, na.rm = TRUE)
+  sd_value <- sd(data, na.rm = TRUE)
+  se <- sd_value / sqrt(n)
+  t_crit <- qt(1 - alpha / 2, df = n - 1)
+  ci <- c(mean_value - t_crit * se, mean_value + t_crit * se)
+  
+  return(list(mean = mean_value, ci_lower = ci[1], ci_upper = ci[2]))
+}
+results <- data.frame(
+  Breed = c("Bichon Frise", "Dobermann", "Staffordshire Bull Terrier"),
+  Mean = NA,
+  CI_Lower = NA,
+  CI_Upper = NA,
+  stringsAsFactors = FALSE
+)
+for (i in 1:nrow(results)) {
+  breed_data <- cleaned_data$Rehomed[cleaned_data$Breed == results$Breed[i]]
+  ci <- calculate_ci(breed_data)
+  results$Mean[i] <- ci$mean
+  results$CI_Lower[i] <- ci$ci_lower
+  results$CI_Upper[i] <- ci$ci_upper
+}
+results$p_value <- c(0.371, "<0.001", "<0.001")
+ci_plot <- ggplot(results, aes(x = Mean, y = Breed)) +
+  geom_errorbarh(aes(xmin = CI_Lower, xmax = CI_Upper), height = 0.2, color = "black") +
+  geom_point(size = 3) +
+  geom_vline(xintercept = 27, linetype = "dashed", color = "red") +
+  geom_text(aes(label = paste0("p = ", p_value), x = CI_Upper + 2), size = 3, hjust = 0) +
+  labs(
+    title = "Confidence Intervals for Rehoming Time by Breed",
+    x = "Mean Rehoming Time (Weeks) with 95% Confidence Interval",
+    y = "Breed"
+  ) +
+  scale_x_continuous(
+    limits = c(min(results$CI_Lower) - 2, max(results$CI_Upper) + 5), 
+    expand = c(0, 0)
+  ) +
+  theme_minimal() +
+  theme(
+    plot.margin = unit(c(1, 1, 1, 1), "cm"), 
+    axis.text.x = element_text(size = 10),  
+    axis.text.y = element_text(size = 10)   
+  )
+ggsave(
+  filename = "confidence_intervals_plot.png", 
+  plot = ci_plot, 
+  width = 12, 
+  height = 4, 
+  dpi = 300    
+)
+```
+
+# Pairwise two sided t tests
+```{r}
+bichon_data <- cleaned_data$Rehomed[cleaned_data$Breed == "Bichon Frise"]
+dobermann_data <- cleaned_data$Rehomed[cleaned_data$Breed == "Dobermann"]
+terrier_data <- cleaned_data$Rehomed[cleaned_data$Breed == "Staffordshire Bull Terrier"]
+calculate_pairwise_ci_pvalue <- function(data1, data2) {
+  n1 <- length(data1)
+  n2 <- length(data2)
+  mean1 <- mean(data1)
+  mean2 <- mean(data2)
+  sd1 <- sd(data1)
+  sd2 <- sd(data2)
+  se_diff <- sqrt((sd1^2 / n1) + (sd2^2 / n2))
+  mean_diff <- mean1 - mean2
+  alpha <- 0.05
+  t_crit <- qt(1 - alpha / 2, df = min(n1 - 1, n2 - 1))
+  ci_lower <- mean_diff - t_crit * se_diff
+  ci_upper <- mean_diff + t_crit * se_diff
+  t_stat <- mean_diff / se_diff
+  p_value <- 2 * (1 - pt(abs(t_stat), df = min(n1 - 1, n2 - 1)))
+  
+  return(c(mean_diff, ci_lower, ci_upper, p_value))
+}
+bichon_vs_dobermann <- calculate_pairwise_ci_pvalue(bichon_data, dobermann_data)
+bichon_vs_terrier <- calculate_pairwise_ci_pvalue(bichon_data, terrier_data)
+dobermann_vs_terrier <- calculate_pairwise_ci_pvalue(dobermann_data, terrier_data)
+pairwise_results <- data.frame(
+  Comparison = c("Bichon vs Dobermann", "Bichon vs Terrier", "Dobermann vs Terrier"),
+  Mean_Difference = c(bichon_vs_dobermann[1], bichon_vs_terrier[1], dobermann_vs_terrier[1]),
+  CI_Lower = c(bichon_vs_dobermann[2], bichon_vs_terrier[2], dobermann_vs_terrier[2]),
+  CI_Upper = c(bichon_vs_dobermann[3], bichon_vs_terrier[3], dobermann_vs_terrier[3]),
+  p_value = c(bichon_vs_dobermann[4], bichon_vs_terrier[4], dobermann_vs_terrier[4])
+)
+pairwise_ci_plot <- ggplot(pairwise_results, aes(x = Mean_Difference, y = Comparison)) +
+  geom_errorbarh(aes(xmin = CI_Lower, xmax = CI_Upper), height = 0.2, color = "black") +
+  geom_point(size = 3) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  geom_text(
+    aes(label = paste0("p = ", format(p_value, digits = 3)), x = CI_Upper + 2),
+    size = 3, hjust = 0
+  ) +
+  labs(
+    title = "Pairwise Confidence Intervals for Mean Differences Between Breeds",
+    x = "Mean Difference with 95% Confidence Interval",
+    y = "Comparison"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.margin = unit(c(2, 2, 1, 1), "cm"),
+    plot.title = element_text(size = 14, hjust = 0.5),
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 10)
+  ) +
+  coord_cartesian(xlim = c(min(pairwise_results$CI_Lower) - 2, max(pairwise_results$CI_Upper) + 5))
+ggsave(
+  filename = "pairwise_confidence_intervals_with_pvalues_plot.png", 
+  plot = pairwise_ci_plot, 
+  width = 15,
+  height = 6, 
+  dpi = 300
+)
+```
+
+
+
+
